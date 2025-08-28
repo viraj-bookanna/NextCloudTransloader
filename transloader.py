@@ -117,7 +117,7 @@ async def handler(event):
         if len(folder_link)!=2:
             await event.respond('Syntax to add folder link\n`/add_folder folder_link`')
         else:
-            folder_key = folder_link[1].split('/s/')
+            folder_key = folder_link[1].split(f'{NEXTCLOUD_DOMAIN}/s/')
             if len(folder_link)!=2:
                 await event.respond('Invalid command')
                 return
