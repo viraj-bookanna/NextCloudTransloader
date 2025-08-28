@@ -109,6 +109,9 @@ async def handler(event):
             'username': sender.username,
         }
         collection.update_one({'chat_id': event.chat_id}, {'$set': user}, upsert=True)
+    if event.message.text.startswith('/start'):
+        await event.respond('Hi')
+        return
     if event.message.text.startswith('/add_folder'):
         folder_link = event.message.text.split(' ')
         if len(folder_link)!=2:
