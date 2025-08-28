@@ -95,6 +95,10 @@ def find_all_urls(message):
 bot = TelegramClient('nextpipe', 6, 'eb06d4abfb49dc3eeb1aeb98ae0f581e').start(bot_token=os.environ['BOT_TOKEN'])
 mongo_client = MongoClient(os.environ['MONGODB_URI'], server_api=ServerApi('1'))
 collection = mongo_client.nextcloud_pipe.users
+direct_reply = {
+    'start': "Hi",
+    'help': "You can create a public folder in your nextcloud account and get the share link\nThe link looks like: `https://cloud.example.lk/s/aBcDEfGH`\nYou have to send this link to /add_folder",
+}
 
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
 async def handler(event):
@@ -108,33 +112,30 @@ async def handler(event):
             'username': sender.username,
         }
         collection.update_one({'chat_id': event.chat_id}, {'$set': user}, upsert=True)
-    if event.message.text.startswith('/start'):
-        await event.respond('Hi')
-        return
-    if event.message.text.startswith('/add_folder'):
-        folder_link = event.message.text.split(' ')
-        if len(folder_link)!=2:
-            await event.respond('Syntax to add folder link\n`/add_folder folder_link`')
-        else:
-            folder = folder_link[1].split(r'/s/')
-            if len(folder_link)!=2:
-                await event.respond('Invalid command')
-                return
-            collection.update_one({'chat_id': event.chat_id}, {'$set': {'nextcloud_domain': folder[0], 'folder_key': folder[1]}})
-            await event.respond('Folder link add success')
-        return
-    elif 'nextcloud_domain' not in user or 'folder_key' not in user:
-        await event.respond('Please /add_folder first')
-        return
-    try:
-        urls = find_all_urls(event.message)
-        if len(urls) == 0:
+    if event.message.text in direct_reply.keys():
+        await event.respond(direct_reply[event.message.text])
+    elif event.message.text == '/add_folder':
+        await event.respond('Send the folder link')
+        collection.update_one({'chat_id': event.chat_id}, {'$set': {'command': 'add_folder'}})
+    elif user.get('command', '') == 'add_folder':
+        folder = event.message.text.split(r'/s/')
+        if len(folder)!=2:
+            await event.respond('Invalid link')
             return
-        msg = await event.respond('wait...')
-        for url in urls:
-            await stream_download_to_nextcloud(url, user, msg)
-    except Exception as e:
-        await event.respond(f"Error: {e}")
+        collection.update_one({'chat_id': event.chat_id}, {'$set': {'nextcloud_domain': folder[0], 'folder_key': folder[1]}})
+        await event.respond('Folder link add success')
+    elif 'nextcloud_domain' in user and 'folder_key' in user:
+        try:
+            urls = find_all_urls(event.message)
+            if len(urls) == 0:
+                return
+            msg = await event.respond('wait...')
+            for url in urls:
+                await stream_download_to_nextcloud(url, user, msg)
+        except Exception as e:
+            await event.respond(f"Error: {e}")
+    else:
+        await event.respond('Please /add_folder first')
 
 with bot:
     bot.run_until_disconnected()
