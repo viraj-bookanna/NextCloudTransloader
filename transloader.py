@@ -8,7 +8,6 @@ from pymongo.server_api import ServerApi
 
 load_dotenv(override=True)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-NEXTCLOUD_DOMAIN = os.getenv('NEXTCLOUD_DOMAIN', 'dms.uom.lk')
 DOWNLOAD_TIMEOUT_MINUTES = int(os.getenv('DOWNLOAD_TIMEOUT_MINUTES', '10'))
 
 def humanify(byte_size):
@@ -45,7 +44,7 @@ async def callback_pipe(source_stream, total, progress_callback):
         downloaded += len(chunk)
         if progress_callback and total:
             await progress_callback(downloaded, total)
-async def stream_download_to_nextcloud(download_url, folder_key, message, nc_domain=NEXTCLOUD_DOMAIN):
+async def stream_download_to_nextcloud(download_url, user, message):
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(ssl=False),
         timeout=aiohttp.ClientTimeout(total=60*DOWNLOAD_TIMEOUT_MINUTES)
@@ -72,9 +71,9 @@ async def stream_download_to_nextcloud(download_url, folder_key, message, nc_dom
             tk = TimeKeeper()
             progress_callback = lambda c,t:prog_callback('Transload', c, t, message, file_org_name, tk)
             async with session.put(
-                f"https://{nc_domain}/public.php/webdav/{file_org_name}",
+                f"{user['nextcloud_domain']}/public.php/webdav/{file_org_name}",
                 data=callback_pipe(resp.content.iter_chunked(1024), total, progress_callback),
-                auth=aiohttp.BasicAuth(folder_key, ""),
+                auth=aiohttp.BasicAuth(user['folder_key'], ""),
                 headers=up_headers
             ) as put_resp:
                 if put_resp.status not in [200, 201, 204]:
@@ -117,14 +116,14 @@ async def handler(event):
         if len(folder_link)!=2:
             await event.respond('Syntax to add folder link\n`/add_folder folder_link`')
         else:
-            folder_key = folder_link[1].split(f'{NEXTCLOUD_DOMAIN}/s/')
+            folder = folder_link[1].split(r'/s/')
             if len(folder_link)!=2:
                 await event.respond('Invalid command')
                 return
-            collection.update_one({'chat_id': event.chat_id}, {'$set': {'folder_key': folder_key[1]}})
+            collection.update_one({'chat_id': event.chat_id}, {'$set': {'nextcloud_domain': folder[0], 'folder_key': folder[1]}})
             await event.respond('Folder link add success')
         return
-    elif 'folder_key' not in user:
+    elif 'nextcloud_domain' not in user or 'folder_key' not in user:
         await event.respond('Please /add_folder first')
         return
     try:
@@ -133,7 +132,7 @@ async def handler(event):
             return
         msg = await event.respond('wait...')
         for url in urls:
-            await stream_download_to_nextcloud(url, user['folder_key'], msg)
+            await stream_download_to_nextcloud(url, user, msg)
     except Exception as e:
         await event.respond(f"Error: {e}")
 
