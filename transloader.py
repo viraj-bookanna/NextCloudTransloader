@@ -78,7 +78,7 @@ async def stream_download_to_nextcloud(download_url, user, message):
             ) as put_resp:
                 if put_resp.status not in [200, 201, 204]:
                     raise Exception(f"Error-Code: {put_resp.status}")
-                await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅", buttons=[[Button.url("Open Folder 🔗", f'https://{user['nextcloud_domain']}/s/{user['folder_key']}')]])
+                await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅", buttons=[[Button.url("Open Folder 🔗", f'{user['nextcloud_domain']}/s/{user['folder_key']}')]])
 def find_all_urls(message):
     ret = list()
     if message.entities is None:
