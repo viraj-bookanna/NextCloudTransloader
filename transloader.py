@@ -114,6 +114,9 @@ async def handler(event):
         collection.update_one({'chat_id': event.chat_id}, {'$set': user}, upsert=True)
     if event.message.text in direct_reply.keys():
         await event.respond(direct_reply[event.message.text])
+    elif event.message.text == '/cancel':
+        await event.respond('Cancelled.')
+        collection.update_one({'chat_id': event.chat_id}, {'$set': {'command': ''}})
     elif event.message.text == '/add_folder':
         await event.respond('Send the folder link')
         collection.update_one({'chat_id': event.chat_id}, {'$set': {'command': 'add_folder'}})
