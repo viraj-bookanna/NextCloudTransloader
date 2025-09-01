@@ -96,8 +96,8 @@ bot = TelegramClient('nextpipe', 6, 'eb06d4abfb49dc3eeb1aeb98ae0f581e').start(bo
 mongo_client = MongoClient(os.environ['MONGODB_URI'], server_api=ServerApi('1'))
 collection = mongo_client.nextcloud_pipe.users
 direct_reply = {
-    'start': "Hi",
-    'help': "You can create a public folder in your nextcloud account and get the share link\nThe link looks like: `https://cloud.example.lk/s/aBcDEfGH`\nYou have to send this link to /add_folder",
+    '/start': "Hi",
+    '/help': "You can create a public folder in your nextcloud account and get the share link\nThe link looks like: `https://cloud.example.lk/s/aBcDEfGH`\nYou have to send this link to /add_folder",
 }
 
 @bot.on(events.NewMessage(func=lambda e: e.is_private))
