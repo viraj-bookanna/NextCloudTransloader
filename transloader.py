@@ -55,7 +55,7 @@ async def stream_download_to_nextcloud(download_url, user, message):
             'Referer': f'{parsed_url.scheme}://{parsed_url.netloc}/',
         }
         async with session.get(download_url, headers=down_headers) as resp:
-            file_org_name = urllib.parse.unquote(os.path.basename(parsed_url.path))
+            file_org_name = urllib.parse.unquote(os.path.basename(urllib.parse.urlparse(str(resp.url)).path))
             server_filename = parse_header(resp.headers.get('content-disposition', ''))[1].get('filename', None)
             if resp.status != 200:
                 raise Exception(f"Failed to download file: {resp.status}")
