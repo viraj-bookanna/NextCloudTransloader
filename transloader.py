@@ -125,7 +125,7 @@ async def handler(event):
         if len(folder)!=2:
             await event.respond('Invalid link')
             return
-        collection.update_one({'chat_id': event.chat_id}, {'$set': {'nextcloud_domain': folder[0], 'folder_key': folder[1]}})
+        collection.update_one({'chat_id': event.chat_id}, {'$set': {'nextcloud_domain': folder[0], 'folder_key': folder[1], 'command': ''}})
         await event.respond('Folder link add success')
     elif 'nextcloud_domain' in user and 'folder_key' in user:
         try:
