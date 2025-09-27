@@ -74,11 +74,18 @@ async def stream_download_to_nextcloud(download_url, user, message):
                 f"{user['nextcloud_domain']}/public.php/webdav/{file_org_name}",
                 data=callback_pipe(resp.content.iter_chunked(1024), total, progress_callback),
                 auth=aiohttp.BasicAuth(user['folder_key'], ""),
-                headers=up_headers
+                headers=up_headers,
             ) as put_resp:
                 if put_resp.status not in [200, 201, 204]:
                     raise Exception(f"Error-Code: {put_resp.status}")
-                await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅", buttons=[[Button.url("Open Folder 🔗", f"{user['nextcloud_domain']}/s/{user['folder_key']}")]])
+                delmsg = ''
+                if user.get('immdel_on'):
+                    await session.delete(
+                        f"{user['nextcloud_domain']}/public.php/webdav/{file_org_name}",
+                        auth=aiohttp.BasicAuth(user['folder_key'], ""),
+                    )
+                    delmsg = ' (Immediate Deletion)'
+                await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅{delmsg}", buttons=[[Button.url("Open Folder 🔗", f"{user['nextcloud_domain']}/s/{user['folder_key']}")]])
 def find_all_urls(message):
     ret = list()
     if message.entities is None:
@@ -110,10 +117,27 @@ async def handler(event):
             'first_name': sender.first_name,
             'last_name': sender.last_name,
             'username': sender.username,
+            'allow': False,
         }
         collection.update_one({'chat_id': event.chat_id}, {'$set': user}, upsert=True)
-    if event.message.text in direct_reply.keys():
+    if event.chat_id==int(os.environ['ADMIN_ID']):
+        cmd = event.message.text.split(' ')
+        if cmd[0]=='/a':
+            collection.update_one({'chat_id': int(cmd[1])}, {'$set': {'allow': True}})
+            await event.respond(f"User: {cmd[1]} allowed")
+        elif cmd[0]=='/d':
+            collection.update_one({'chat_id': int(cmd[1])}, {'$set': {'allow': False}})
+            await event.respond(f"User: {cmd[1]} blocked")
+    if event.chat_id!=int(os.environ['ADMIN_ID']) and not user.get('allow'):
+        await event.respond("You don't have permission to use this bot")
+    elif event.message.text in direct_reply.keys():
         await event.respond(direct_reply[event.message.text])
+    elif event.message.text == '/immdel_on':
+        await event.respond('Immediate deletion enabled.')
+        collection.update_one({'chat_id': event.chat_id}, {'$set': {'immdel_on': True}})
+    elif event.message.text == '/immdel_off':
+        await event.respond('Immediate deletion disabled.')
+        collection.update_one({'chat_id': event.chat_id}, {'$set': {'immdel_on': False}})
     elif event.message.text == '/cancel':
         await event.respond('Cancelled.')
         collection.update_one({'chat_id': event.chat_id}, {'$set': {'command': ''}})
