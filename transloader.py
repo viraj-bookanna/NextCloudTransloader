@@ -5,6 +5,7 @@ from telethon.tl.types import MessageEntityUrl
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+from http import HTTPStatus
 
 load_dotenv(override=True)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -23,12 +24,14 @@ def progress_bar(percentage, progressbar_length=10):
     suffix = (progressbar_length-fill) * suffix_char
     return f"{prefix}{suffix} {percentage:.2f}%"
 class TimeKeeper:
-    last_percentage = 0
-    last_edited_time = 0
+    def __init__(self, title=''):
+        self.title = title
+        self.last_percentage = 0
+        self.last_edited_time = 0
 async def prog_callback(desc, current, total, event, file_name, tk):
     percentage = current/total*100
     if tk.last_percentage+2 < percentage and tk.last_edited_time+5 < time.time():
-        await event.edit(f"**{desc}ing**: {progress_bar(percentage)}\n**File Name**: {file_name}\n**Size**: {humanify(total)}\n**{desc}ed**: {humanify(current)}")
+        await event.edit(f"{tk.title}\n**{desc}ing**: {progress_bar(percentage)}\n**File Name**: {file_name}\n**Size**: {humanify(total)}\n**{desc}ed**: {humanify(current)}")
         tk.last_percentage = percentage
         tk.last_edited_time = time.time()
 def parse_header(header):
@@ -44,7 +47,7 @@ async def callback_pipe(source_stream, total, progress_callback):
         downloaded += len(chunk)
         if progress_callback and total:
             await progress_callback(downloaded, total)
-async def stream_download_to_nextcloud(download_url, user, message):
+async def stream_download_to_nextcloud(download_url, user, message, title=''):
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(ssl=False),
         timeout=aiohttp.ClientTimeout(total=60*DOWNLOAD_TIMEOUT_MINUTES)
@@ -68,7 +71,7 @@ async def stream_download_to_nextcloud(download_url, user, message):
                 "Content-Type": "application/octet-stream",
                 "Content-Length": str(total)
             }
-            tk = TimeKeeper()
+            tk = TimeKeeper(title)
             progress_callback = lambda c,t:prog_callback('Transload', c, t, message, file_org_name, tk)
             async with session.put(
                 f"{user['nextcloud_domain']}/public.php/webdav/{file_org_name}",
@@ -77,7 +80,7 @@ async def stream_download_to_nextcloud(download_url, user, message):
                 headers=up_headers,
             ) as put_resp:
                 if put_resp.status not in [200, 201, 204]:
-                    raise Exception(f"Error-Code: {put_resp.status}")
+                    raise Exception(f"Error-Code: {put_resp.status} ({HTTPStatus(put_resp.status).phrase})")
                 delmsg = ''
                 if user.get('immdel_on'):
                     await session.delete(
@@ -152,15 +155,23 @@ async def handler(event):
         collection.update_one({'chat_id': event.chat_id}, {'$set': {'nextcloud_domain': folder[0], 'folder_key': folder[1], 'command': ''}})
         await event.respond('Folder link add success')
     elif 'nextcloud_domain' in user and 'folder_key' in user:
+        msg = None
         try:
             urls = find_all_urls(event.message)
-            if len(urls) == 0:
+            url_count = len(urls)
+            if url_count == 0:
                 return
             msg = await event.respond('wait...')
-            for url in urls:
-                await stream_download_to_nextcloud(url, user, msg)
+            for i, url in enumerate(urls):
+                try:
+                    await stream_download_to_nextcloud(url, user, msg, '' if url_count==1 else f'File {i+1} of {url_count}')
+                except Exception as e2:
+                    await msg.reply(f"Error: {e2}\nURL: {url}")
         except Exception as e:
-            await event.respond(f"Error: {e}")
+            if msg:
+                await msg.edit(f"Error: {e}")
+            else:
+                await event.reply(f"Error: {e}")
     else:
         await event.respond('Please /add_folder first')
 
