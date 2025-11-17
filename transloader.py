@@ -187,12 +187,13 @@ async def handler(event):
     elif 'nextcloud_domain' in user and 'folder_key' in user:
         msg = None
         try:
+            if event.message.document:
+                msg = await event.respond('wait...')
+                await stream_tg_to_nextcloud(event, user, msg)
+                return
             urls = find_all_urls(event.message)
             url_count = len(urls)
             if url_count == 0:
-                if event.message.document:
-                    msg = await event.respond('wait...')
-                    await stream_tg_to_nextcloud(event, user, msg)
                 return
             msg = await event.respond('wait...')
             for i, url in enumerate(urls):
