@@ -1,6 +1,5 @@
-import os,aiohttp,asyncio,urllib.parse,time,hashlib,logging
+import os,aiohttp,urllib.parse,time,hashlib,logging
 from telethon import TelegramClient,events,Button
-from telethon.sessions import StringSession
 from telethon.tl.types import MessageEntityUrl
 from dotenv import load_dotenv
 from pymongo.mongo_client import MongoClient
