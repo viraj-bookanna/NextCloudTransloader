@@ -1,5 +1,4 @@
 aiohttp
-asyncio
 telethon
 python-dotenv
 pymongo
