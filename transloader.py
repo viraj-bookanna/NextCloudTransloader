@@ -73,8 +73,9 @@ async def stream_download_to_nextcloud(download_url, user, message, title=''):
             }
             tk = TimeKeeper(title)
             progress_callback = lambda c,t:prog_callback('Transload', c, t, message, file_org_name, tk)
+            encoded_filename = urllib.parse.quote(file_org_name)
             async with session.put(
-                f"{user['nextcloud_domain']}/public.php/webdav/{urllib.parse.quote(file_org_name)}",
+                f"{user['nextcloud_domain']}/public.php/webdav/{encoded_filename}",
                 data=callback_pipe(resp.content.iter_chunked(1024), total, progress_callback),
                 auth=aiohttp.BasicAuth(user['folder_key'], ""),
                 headers=up_headers,
@@ -84,11 +85,12 @@ async def stream_download_to_nextcloud(download_url, user, message, title=''):
                 delmsg = ''
                 if user.get('immdel_on'):
                     await session.delete(
-                        f"{user['nextcloud_domain']}/public.php/webdav/{urllib.parse.quote(file_org_name)}",
+                        f"{user['nextcloud_domain']}/public.php/webdav/{encoded_filename}",
                         auth=aiohttp.BasicAuth(user['folder_key'], ""),
                     )
                     delmsg = ' (Immediate Deletion)'
-                await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅{delmsg}", buttons=[[Button.url("Open Folder 🔗", f"{user['nextcloud_domain']}/s/{user['folder_key']}")]])
+                direct_link = f"{user['nextcloud_domain']}/s/{user['folder_key']}/download?path=%2F&files={encoded_filename}"
+                await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅{delmsg}\nDownload Link: `{direct_link}`", buttons=[[Button.url("Download File 📥", direct_link)]])
 async def stream_tg_to_nextcloud(event, user, message, title=''):
     total = event.file.size
     file_org_name = event.file.name
