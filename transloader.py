@@ -47,6 +47,28 @@ async def callback_pipe(source_stream, total, progress_callback):
         downloaded += len(chunk)
         if progress_callback and total:
             await progress_callback(downloaded, total)
+async def nc_upload(session, user, data, file_size, file_name, message):
+    encoded_filename = urllib.parse.quote(file_name)
+    async with session.put(
+        f"{user['nextcloud_domain']}/public.php/webdav/{encoded_filename}",
+        data=data,
+        auth=aiohttp.BasicAuth(user['folder_key'], ""),
+        headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(file_size)
+        },
+    ) as put_resp:
+        if put_resp.status not in [200, 201, 204]:
+            raise Exception(f"NextCloud Says: {put_resp.status} ({HTTPStatus(put_resp.status).phrase})")
+        delmsg = ''
+        if user.get('immdel_on'):
+            await session.delete(
+                f"{user['nextcloud_domain']}/public.php/webdav/{encoded_filename}",
+                auth=aiohttp.BasicAuth(user['folder_key'], ""),
+            )
+            delmsg = ' (Immediate Deletion)'
+        direct_link = f"{user['nextcloud_domain']}/s/{user['folder_key']}/download?path=%2F&files={encoded_filename}"
+        await message.edit(f"**File Name**: {file_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅{delmsg}\nDownload Link: `{direct_link}`", buttons=[[Button.url("Download File 📥", direct_link)],[Button.url("Open Folder 🔗", f"{user['nextcloud_domain']}/s/{user['folder_key']}")]])
 async def stream_download_to_nextcloud(download_url, user, message, title=''):
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(ssl=False),
@@ -62,64 +84,36 @@ async def stream_download_to_nextcloud(download_url, user, message, title=''):
             server_filename = parse_header(resp.headers.get('content-disposition', ''))[1].get('filename', None)
             if resp.status != 200:
                 raise Exception(f"SourceServer Says: {resp.status} ({HTTPStatus(resp.status).phrase})")
-            total = int(resp.headers.get('content-length', 0)) or None
+            file_size = int(resp.headers.get('content-length', 0)) or None
             if server_filename:
                 file_org_name = server_filename
             if file_org_name == '' or len(file_org_name) > 250:
                 file_org_name = hashlib.md5(download_url.encode()).hexdigest()
-            up_headers = {
-                "Content-Type": "application/octet-stream",
-                "Content-Length": str(total)
-            }
             tk = TimeKeeper(title)
             progress_callback = lambda c,t:prog_callback('Transload', c, t, message, file_org_name, tk)
-            encoded_filename = urllib.parse.quote(file_org_name)
-            async with session.put(
-                f"{user['nextcloud_domain']}/public.php/webdav/{encoded_filename}",
-                data=callback_pipe(resp.content.iter_chunked(1024), total, progress_callback),
-                auth=aiohttp.BasicAuth(user['folder_key'], ""),
-                headers=up_headers,
-            ) as put_resp:
-                if put_resp.status not in [200, 201, 204]:
-                    raise Exception(f"NextCloud Says: {put_resp.status} ({HTTPStatus(put_resp.status).phrase})")
-                delmsg = ''
-                if user.get('immdel_on'):
-                    await session.delete(
-                        f"{user['nextcloud_domain']}/public.php/webdav/{encoded_filename}",
-                        auth=aiohttp.BasicAuth(user['folder_key'], ""),
-                    )
-                    delmsg = ' (Immediate Deletion)'
-                direct_link = f"{user['nextcloud_domain']}/s/{user['folder_key']}/download?path=%2F&files={encoded_filename}"
-                await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅{delmsg}\nDownload Link: `{direct_link}`", buttons=[[Button.url("Download File 📥", direct_link)]])
+            await nc_upload(
+                session,
+                user,
+                callback_pipe(resp.content.iter_chunked(1024), file_size, progress_callback),
+                file_size,
+                file_org_name,
+                message
+            )
 async def stream_tg_to_nextcloud(event, user, message, title=''):
-    total = event.file.size
-    file_org_name = event.file.name
-    up_headers = {
-        "Content-Type": "application/octet-stream",
-        "Content-Length": str(total)
-    }
     tk = TimeKeeper(title)
-    progress_callback = lambda c,t:prog_callback('Transload', c, t, message, file_org_name, tk)
+    progress_callback = lambda c,t:prog_callback('Transload', c, t, message, event.file.name, tk)
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(ssl=False),
         timeout=aiohttp.ClientTimeout(total=60*DOWNLOAD_TIMEOUT_MINUTES)
     ) as session:
-        async with session.put(
-            f"{user['nextcloud_domain']}/public.php/webdav/{urllib.parse.quote(file_org_name)}",
-            data=callback_pipe(download_file(event.client, event.message.document), total, progress_callback),
-            auth=aiohttp.BasicAuth(user['folder_key'], ""),
-            headers=up_headers,
-        ) as put_resp:
-            if put_resp.status not in [200, 201, 204]:
-                raise Exception(f"NextCloud Says: {put_resp.status} ({HTTPStatus(put_resp.status).phrase})")
-            delmsg = ''
-            if user.get('immdel_on'):
-                await session.delete(
-                    f"{user['nextcloud_domain']}/public.php/webdav/{urllib.parse.quote(file_org_name)}",
-                    auth=aiohttp.BasicAuth(user['folder_key'], ""),
-                )
-                delmsg = ' (Immediate Deletion)'
-            await message.edit(f"**File Name**: {file_org_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅{delmsg}", buttons=[[Button.url("Open Folder 🔗", f"{user['nextcloud_domain']}/s/{user['folder_key']}")]])
+        await nc_upload(
+            session,
+            user,
+            callback_pipe(download_file(event.client, event.message.document), event.file.size, progress_callback),
+            event.file.size,
+            event.file.name,
+            message
+        )
 def find_all_urls(message):
     ret = list()
     if message.entities is None:
