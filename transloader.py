@@ -68,7 +68,7 @@ async def nc_upload(session, user, data, file_size, file_name, message):
             )
             delmsg = ' (Immediate Deletion)'
         direct_link = f"{user['nextcloud_domain']}/s/{user['folder_key']}/download?path=%2F&files={encoded_filename}"
-        await message.edit(f"**File Name**: {file_name}\n**Size**: {humanify(total)}\nTransfer Successful ✅{delmsg}\nDownload Link: `{direct_link}`", buttons=[[Button.url("Download File 📥", direct_link)],[Button.url("Open Folder 🔗", f"{user['nextcloud_domain']}/s/{user['folder_key']}")]])
+        await message.edit(f"**File Name**: {file_name}\n**Size**: {humanify(file_size)}\nTransfer Successful ✅{delmsg}\nDownload Link: `{direct_link}`", buttons=[[Button.url("Download File 📥", direct_link)],[Button.url("Open Folder 🔗", f"{user['nextcloud_domain']}/s/{user['folder_key']}")]])
 async def stream_download_to_nextcloud(download_url, user, message, title=''):
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(ssl=False),
